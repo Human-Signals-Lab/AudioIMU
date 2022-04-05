@@ -1,5 +1,7 @@
 # AudioIMU_new
 
+Github page to paper: #AudioIMU: IMU-based activity recognition guided by audio inputs
+
 ### Student model
 
 Derive DeepConvLSTM activity recognition models based on IMU inputs only: _lab_motion_train.py_
