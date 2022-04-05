@@ -15,7 +15,7 @@ import torch.optim as optim
 import torch.utils.data
 from torch.utils.data import TensorDataset
 
-from models import StatisticsContainer, init_weights, DeepConvLSTM_Split, STFT, Conv_Split, Conv_Split_3cnn_channel, Conv_Split_3cnn_individual, Conv_Split_3cnn_feature
+from models import StatisticsContainer, init_weights, DeepConvLSTM_Split, STFT
 from ParticipantLab import ParticipantLab as parti
 from utils import plot_confusion_matrix, plotCNNStatistics
 
