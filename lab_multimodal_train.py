@@ -220,6 +220,7 @@ for sub in sub_list:
             loss = F.cross_entropy(output_logits, labels)
 
             if model_name == 'DeepConvLSTM_MotionAudio_CNN14_Attention':
+                # the center loss is introduced to enhance the teacher performance
                 center_loss = compute_center_loss(z, centers, labels)
                 loss = loss + 0.003 * center_loss
                 losses.update(loss.item(), inputs.shape[0])
