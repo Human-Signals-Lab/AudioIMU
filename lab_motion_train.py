@@ -53,7 +53,7 @@ else:
 
 window_size = 1024
 hop_size = 320
-batch_size = 64 
+batch_size = 256 
 model_name = 'DeepConvLSTM_Split'
 
 fmin, fmax = 50, 11000
