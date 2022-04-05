@@ -18,4 +18,4 @@ Train and evaluate with 15 participants: _joint_trainfixlr_loso_individual.py_ (
 
 All the model architectures and FFT functions are wrappped up in _models.py_ 
 
-The weights of the pre-trained Audio CNN and the tested teacher/student models can be accessed at: 
+Weights of the pre-trained Audio CNN (from Kong et al., ICASSP 2020) and the student models can be accessed at: https://dataverse.tdl.org/dataset.xhtml?persistentId=doi%3A10.18738%2FT8%2FS5RTFH&version=DRAFT
