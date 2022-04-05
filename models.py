@@ -588,295 +588,6 @@ class ConvBlock5x5(nn.Module):
         return x
 
 
-class FineTuneCnn6(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num):
-        
-        super(FineTuneCnn6, self).__init__()
-        
-        self.base = Cnn65x5(sample_rate, window_size, hop_size, mel_bins, fmin,fmax, 527)
-        pretrained_checkpoint_path = '/media/hd4t2/Rebecca/Research-VoiceAware-LightSense/data-analysis/PANNs-models/Cnn6_mAP=0.343.pth'
-        checkpoint = torch.load(pretrained_checkpoint_path, map_location='cuda')
-        self.base.load_state_dict(checkpoint['model'])
-        self.base.fc_audioset = nn.Linear(512, classes_num, bias=True)
-        
-        self.init_weights()
-
-    def init_weights(self):
-        init_layer(self.base.fc_audioset)
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-        output_dict = self.base(input,mixup_lambda)
-        embedding = output_dict['embedding']
-        clipwise_output = torch.sigmoid(self.base.fc_audioset(embedding))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
-
-class FineTuneCnn6_FC2Classifier(nn.Module):
-    ## adding a CNN classifier at the end
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num):
-        
-        super(FineTuneCnn6_CNNClassifier, self).__init__()
-        
-        self.base = Cnn65x5(sample_rate, window_size, hop_size, mel_bins, fmin,fmax, 527)
-        pretrained_checkpoint_path = '/media/hd4t2/Rebecca/Research-VoiceAware-LightSense/data-analysis/PANNs-models/Cnn6_mAP=0.343.pth'
-        checkpoint = torch.load(pretrained_checkpoint_path, map_location='cuda')
-        self.base.load_state_dict(checkpoint['model'])
-
-        self.base.fc_audioset = nn.Linear(512, classes_num, bias=True)
-        self.fc1 = nn.Linear(512, 256, bias = True)
-        self.fc_class = nn.Linear(256, classes_num, bias = True)
-        
-        self.init_weights()
-
-    def init_weights(self):
-        # init_layer(self.base.fc_audioset)
-        init_layer(self.fc1)
-        init_layer(self.fc_class)
-
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-        output_dict = self.base(input,mixup_lambda)
-        embedding = output_dict['embedding']
-        x = F.relu_(self.fc1(x))
-        embedding2 = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_class(x))
-
-        # clipwise_output = torch.sigmoid(self.base.fc_audioset(embedding))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding2}
-
-        return output_dict
-
-
-class FineTuneCnn6_CNNClassifier(nn.Module):
-    ## adding a CNN classifier at the end
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num):
-        
-        super(FineTuneCnn6_CNNClassifier, self).__init__()
-        
-        self.base = Cnn65x5(sample_rate, window_size, hop_size, mel_bins, fmin,fmax, 527)
-        pretrained_checkpoint_path = '/media/hd4t2/Rebecca/Research-VoiceAware-LightSense/data-analysis/PANNs-models/Cnn6_mAP=0.343.pth'
-        checkpoint = torch.load(pretrained_checkpoint_path, map_location='cuda')
-        self.base.load_state_dict(checkpoint['model'])
-
-        self.base.fc_audioset = nn.Linear(512, classes_num, bias=True)
-
-        self.conv1 = ConvBlock1D(in_channels = 1, out_channels = 64)
-        self.conv2 = ConvBlock1D(in_channels = 64, out_channels = 128)
-        self.conv3 = ConvBlock1D(in_channels = 128, out_channels = 256)
-
-        self.fc1 = nn.Linear(256, 256, bias = True)
-        self.fc_class = nn.Linear(256, classes_num, bias = True)
-        
-        self.init_weights()
-
-    def init_weights(self):
-        # init_layer(self.base.fc_audioset)
-        init_layer(self.fc1)
-        init_layer(self.fc_class)
-
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-        output_dict = self.base(input,mixup_lambda)
-        embedding = output_dict['embedding']
-
-        embedding = embedding[:,np.newaxis,:]
-        x = self.conv1(embedding, pool_size = 2, pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv2(x, pool_size=2, pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv3(x, pool_size=2, pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-
-        (x1, _) = torch.max(x, dim=2)
-        x2 = torch.mean(x, dim=2)
-        x = x1 + x2
-
-        x = F.relu_(self.fc1(x))
-        embedding2 = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_class(x))
-
-        # clipwise_output = torch.sigmoid(self.base.fc_audioset(embedding))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding2}
-
-        return output_dict
-
-
-class Cnn65x5(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num):
-        
-        super(Cnn65x5, self).__init__()
-
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
-
-        # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
-            freeze_parameters=True)
-
-        # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
-            freeze_parameters=True)
-
-        self.bn0 = nn.BatchNorm2d(mel_bins)
-
-        self.conv_block1 = ConvBlock5x5(in_channels=1, out_channels=64)
-        self.conv_block2 = ConvBlock5x5(in_channels=64, out_channels=128)
-        self.conv_block3 = ConvBlock5x5(in_channels=128, out_channels=256)
-        self.conv_block4 = ConvBlock5x5(in_channels=256, out_channels=512)
-
-        self.fc1 = nn.Linear(512, 512, bias=True)
-        self.fc_audioset = nn.Linear(512, classes_num, bias=True)
-        
-        self.init_weight()
-
-    def init_weight(self):
-        init_bn(self.bn0)
-        init_layer(self.fc1)
-        init_layer(self.fc_audioset)
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-
-        x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
-        x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
-        x = x.transpose(1, 3)
-        x = self.bn0(x)
-        x = x.transpose(1, 3)
-        
-        #if self.training:
-         #   x = self.spec_augmenter(x)
-
-        # Mixup on spectrogram
-        #if self.training and mixup_lambda is not None:
-        #    x = do_mixup(x, mixup_lambda)
-        
-        x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = torch.mean(x, dim=3)
-        
-        (x1, _) = torch.max(x, dim=2)
-        x2 = torch.mean(x, dim=2)
-        x = x1 + x2
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu_(self.fc1(x))
-        embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_audioset(x))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
-
-
-class Cnn6(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num):
-        
-
-        super(Cnn6, self).__init__()
-        self.name = 'CNN6'
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
-
-        # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
-            freeze_parameters=True)
-
-        # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
-            freeze_parameters=True)
-
-        self.bn0 = nn.BatchNorm2d(mel_bins)
-
-        self.conv_block1 = ConvBlock(in_channels=1, out_channels=64)
-        self.conv_block2 = ConvBlock(in_channels=64, out_channels=128)
-        self.conv_block3 = ConvBlock(in_channels=128, out_channels=256)
-        self.conv_block4 = ConvBlock(in_channels=256, out_channels=512)
-
-        self.fc1 = nn.Linear(512, 512, bias=True)
-        self.fc_audioset = nn.Linear(512, classes_num, bias=True)
-        
-        self.init_weight()
-
-    def init_weight(self):
-        init_bn(self.bn0)
-        init_layer(self.fc1)
-        init_layer(self.fc_audioset)
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-
-        x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
-        x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
-        x = x.transpose(1, 3)
-        x = self.bn0(x)
-        x = x.transpose(1, 3)
-        
-        #if self.training:
-         #   x = self.spec_augmenter(x)
-
-        # Mixup on spectrogram
-        #if self.training and mixup_lambda is not None:
-        #    x = do_mixup(x, mixup_lambda)
-        
-        x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = torch.mean(x, dim=3)
-        
-        (x1, _) = torch.max(x, dim=2)
-        x2 = torch.mean(x, dim=2)
-        x = x1 + x2
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu_(self.fc1(x))
-        embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_audioset(x))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
-
-
 class Cnn14(nn.Module):
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
         fmax, classes_num):
@@ -963,26 +674,6 @@ class Cnn14(nn.Module):
 
         return output_dict
 
-class BidirectionalGRU(nn.Module):
-
-    def __init__(self, input_dim, hidden_size, dropout, batch_first):
-        super(BidirectionalGRU, self).__init__()
-
-        self.BiGRU = nn.GRU(
-            input_size=input_dim, hidden_size=hidden_size,
-            num_layers=1, batch_first=batch_first, dropout = dropout, bidirectional=True)
-        # self.bn = nn.BatchNorm1d(rnn_dim)
-
-    def init_weights(self):
-        init_layer(self.BiGRU)
-        # init_bn(self.bn)
-
-    def forward(self, x):
-        self.BiGRU.flatten_parameters()
-        x, _ = self.BiGRU(x)
-        # x = self.bn(x)
-        return x
-
 
 
 class FineTuneCNN14(nn.Module):
@@ -998,456 +689,24 @@ class FineTuneCNN14(nn.Module):
         pretrained_checkpoint_path = './Cnn14_mAP=0.431.pth'
         checkpoint = torch.load(pretrained_checkpoint_path, map_location='cuda')
         self.base.load_state_dict(checkpoint['model'])
-        # customized layers
-        #self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, stride=2, padding=1)      
-        #self.conv2 = nn.Conv1d(in_channels=16, out_channels=16, kernel_size=3, stride=2, padding=1)
-        #self.conv3 = nn.Conv1d(in_channels=16, out_channels=16, kernel_size=3, stride=2, padding=1)
-        #self.fc = nn.Linear(4096, classes_num, bias=True)
         self.base.fc_audioset = nn.Linear(2048, classes_num, bias=True)   # final fc layer, no activation required by torch
 
         self.init_weights()
 
     def init_weights(self):
         init_layer(self.base.fc_audioset)
-        #init_layer(self.fc)
-        #init_layer(self.conv1)
-        #init_layer(self.conv2)
-        #init_layer(self.conv3)
  
     def forward(self, input, mixup_lambda=None):
         """
         Input: (batch_size, data_length)"""
         output_dict = self.base(input,mixup_lambda)
         embedding = output_dict['embedding']   # pre-trained acoustic embedding
-        #clipwise_output = torch.sigmoid(self.base.fc_audioset(embedding))
-        #clipwise_output = self.base.fc_audioset(embedding)
         logits = self.base.fc_audioset(embedding)
-
-        #embedding = embedding.reshape((embedding.shape[0], 1, embedding.shape[1]))   # new for our customized classifier
-        #x = F.relu_(self.conv1(embedding))
-        #x = F.relu_(self.conv2(x))
-        #x = F.relu_(self.conv3(x))   # last conv layer
-        #x = torch.flatten(x, start_dim=1)
-        #logits = self.fc(x)   # customized fc layer
         clipwise_output = logits   # clipwise_output is the raw logit output so that softmax can be applied
         
         output_dict = {'clipwise_output': clipwise_output, 'logits':logits, 'embedding': embedding}
 
         return output_dict
-
-
-class FineTuneCNN14_UpdateAll(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num):
-        
-        super(FineTuneCNN14_UpdateAll, self).__init__()
-        
-        self.base = Cnn14(sample_rate, window_size, hop_size, mel_bins, fmin,fmax, 527)
-        pretrained_checkpoint_path = '/Cnn14_mAP=0.431.pth'
-        checkpoint = torch.load(pretrained_checkpoint_path, map_location='cuda')
-        self.base.load_state_dict(checkpoint['model'])
-        self.base.fc_audioset = nn.Linear(2048, classes_num, bias=True)
-        
-        self.init_weights()
-
-    def init_weights(self):
-        init_layer(self.base.fc_audioset)
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-        """
-        Input: (batch_size, data_length)"""
-
-        x = self.base.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
-        x = self.base.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
-        x = x.transpose(1, 3)
-        x = self.base.bn0(x)
-        x = x.transpose(1, 3)
-        
-#        # Mixup on spectrogram
-#        if self.training and mixup_lambda is not None:
-#            x = do_mixup(x, mixup_lambda)
-        
-        x = self.base.conv_block1(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.base.conv_block2(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.base.conv_block3(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.base.conv_block4(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.base.conv_block5(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.base.conv_block6(x, pool_size=(1, 1), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = torch.mean(x, dim=3)
-        
-        (x1, _) = torch.max(x, dim=2)
-        x2 = torch.mean(x, dim=2)
-        x = x1 + x2
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu_(self.base.fc1(x))
-        embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.base.fc_audioset(x))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-        return output_dict
-
-
-class ConvPreWavBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        
-        super(ConvPreWavBlock, self).__init__()
-        
-        self.conv1 = nn.Conv1d(in_channels=in_channels, 
-                              out_channels=out_channels,
-                              kernel_size=3, stride=1,
-                              padding=1, bias=False)
-                              
-        self.conv2 = nn.Conv1d(in_channels=out_channels, 
-                              out_channels=out_channels,
-                              kernel_size=3, stride=1, dilation=2, 
-                              padding=2, bias=False)
-                              
-        self.bn1 = nn.BatchNorm1d(out_channels)
-        self.bn2 = nn.BatchNorm1d(out_channels)
-
-        self.init_weight()
-        
-    def init_weight(self):
-        init_layer(self.conv1)
-        init_layer(self.conv2)
-        init_bn(self.bn1)
-        init_bn(self.bn2)
-
-        
-    def forward(self, input, pool_size):
-        
-        x = input
-        x = F.relu_(self.bn1(self.conv1(x)))
-        x = F.relu_(self.bn2(self.conv2(x)))
-        x = F.max_pool1d(x, kernel_size=pool_size)
-        
-        return x
-
-class Wavegram_Logmel_Cnn14(nn.Module):
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num):
-        
-        super(Wavegram_Logmel_Cnn14, self).__init__()
-
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
-
-        self.pre_conv0 = nn.Conv1d(in_channels=1, out_channels=64, kernel_size=11, stride=5, padding=5, bias=False)
-        self.pre_bn0 = nn.BatchNorm1d(64)
-        self.pre_block1 = ConvPreWavBlock(64, 64)
-        self.pre_block2 = ConvPreWavBlock(64, 128)
-        self.pre_block3 = ConvPreWavBlock(128, 128)
-        self.pre_block4 = ConvBlock(in_channels=4, out_channels=64)
-
-        # Spectrogram extractor
-        self.spectrogram_extractor = Spectrogram(n_fft=window_size, hop_length=hop_size, 
-            win_length=window_size, window=window, center=center, pad_mode=pad_mode, 
-            freeze_parameters=True)
-
-        # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(sr=sample_rate, n_fft=window_size, 
-            n_mels=mel_bins, fmin=fmin, fmax=fmax, ref=ref, amin=amin, top_db=top_db, 
-            freeze_parameters=True)
-
-        self.bn0 = nn.BatchNorm2d(64)
-
-        self.conv_block1 = ConvBlock(in_channels=1, out_channels=64)
-        self.conv_block2 = ConvBlock(in_channels=128, out_channels=128)
-        self.conv_block3 = ConvBlock(in_channels=128, out_channels=256)
-        self.conv_block4 = ConvBlock(in_channels=256, out_channels=512)
-        self.conv_block5 = ConvBlock(in_channels=512, out_channels=1024)
-        self.conv_block6 = ConvBlock(in_channels=1024, out_channels=2048)
-
-        self.fc1 = nn.Linear(2048, 2048, bias=True)
-        self.fc_audioset = nn.Linear(2048, classes_num, bias=True)
-        
-        self.init_weight()
-
-    def init_weight(self):
-        init_layer(self.pre_conv0)
-        init_bn(self.pre_bn0)
-        init_bn(self.bn0)
-        init_layer(self.fc1)
-        init_layer(self.fc_audioset)
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-
-        a1 = F.relu_(self.pre_bn0(self.pre_conv0(input[:, None, :])))
-        a1 = self.pre_block1(a1, pool_size=4)
-        a1 = self.pre_block2(a1, pool_size=4)
-        a1 = self.pre_block3(a1, pool_size=4)
-        a1 = a1.reshape((a1.shape[0], -1, 32, a1.shape[-1])).transpose(2, 3)
-        a1 = self.pre_block4(a1, pool_size=(2, 1))
-
-        x = self.spectrogram_extractor(input)   # (batch_size, 1, time_steps, freq_bins)
-        x = self.logmel_extractor(x)    # (batch_size, 1, time_steps, mel_bins)
-        
-        x = x.transpose(1, 3)
-        x = self.bn0(x)
-        x = x.transpose(1, 3)
-        
-        x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
-        x = torch.cat((x, a1), dim=1)
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block5(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block6(x, pool_size=(1, 1), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = torch.mean(x, dim=3)
-        
-        (x1, _) = torch.max(x, dim=2)
-        x2 = torch.mean(x, dim=2)
-        x = x1 + x2
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu_(self.fc1(x))
-        embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_audioset(x))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
-
-
-class FineTune_WavegramLogmelCNN14(nn.Module):
-
-    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin, 
-        fmax, classes_num):
-        super(FineTune_WavegramLogmelCNN14, self).__init__()
-
-        
-        self.base = Wavegram_Logmel_Cnn14(sample_rate, window_size, hop_size, mel_bins, fmin,fmax, 527)
-        pretrained_checkpoint_path = '/media/hd4t2/Rebecca/Research-VoiceAware-LightSense/data-analysis/PANNs-models/Wavegram_Logmel_Cnn14_mAP=0.439.pth'
-        checkpoint = torch.load(pretrained_checkpoint_path)
-        self.base.load_state_dict(checkpoint['model'])
-
-        self.base.fc_audioset = nn.Linear(2048, classes_num, bias=True)
-
-        self.init_weights()
-
-    def init_weights(self):
-        init_layer(self.base.fc_audioset)
-
-
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-        output_dict = self.base(input,mixup_lambda)
-        # embedding = output_dict['embedding']
-        clipwise_output = torch.sigmoid(self.base.fc_audioset(output_dict['embedding']))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
-
-
-
-class VGGish_Cnn4(nn.Module):
-    def __init__(self, classes_num):
-        
-
-        super(VGGish_Cnn4, self).__init__()
-        self.name = 'VGGish_CNN4'
-
-        self.conv_block1 = ConvBlock(in_channels=1, out_channels=64)
-        self.conv_block2 = ConvBlock(in_channels=64, out_channels=128)
-
-        self.fc1 = nn.Linear(128, 128, bias=True)
-        self.fc_audioset = nn.Linear(128, classes_num, bias=True)
-        
-        self.init_weight()
-
-    def init_weight(self):
-        # init_bn(self.bn0)
-        init_layer(self.fc1)
-        init_layer(self.fc_audioset)
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-        
-        x = self.conv_block1(input, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = torch.mean(x, dim=3)
-        
-        (x1, _) = torch.max(x, dim=2)
-        x2 = torch.mean(x, dim=2)
-        x = x1 + x2
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu_(self.fc1(x))
-        embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_audioset(x))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
-
-class ConvBlock1D(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        
-        super(ConvBlock1D, self).__init__()
-        
-        self.conv1 = nn.Conv1d(in_channels=in_channels, 
-                              out_channels=out_channels,
-                              kernel_size=3, stride=1,
-                              padding=1, bias=False)
-                              
-        self.conv2 = nn.Conv1d(in_channels=out_channels, 
-                              out_channels=out_channels,
-                              kernel_size=3, stride=1,
-                              padding=1, bias=False)
-                              
-        self.bn1 = nn.BatchNorm1d(out_channels)
-        self.bn2 = nn.BatchNorm1d(out_channels)
-
-        self.init_weight()
-        
-    def init_weight(self):
-        init_layer(self.conv1)
-        init_layer(self.conv2)
-        init_bn(self.bn1)
-        init_bn(self.bn2)
-
-        
-    def forward(self, input, pool_size=2, pool_type='avg'):
-        
-        x = input
-        x = F.relu_(self.bn1(self.conv1(x)))
-        x = F.relu_(self.bn2(self.conv2(x)))
-        if pool_type == 'max':
-            x = F.max_pool1d(x, kernel_size=pool_size)
-        elif pool_type == 'avg':
-            x = F.avg_pool1d(x, kernel_size=pool_size)
-        elif pool_type == 'avg+max':
-            x1 = F.avg_pool1d(x, kernel_size=pool_size)
-            x2 = F.max_pool1d(x, kernel_size=pool_size)
-            x = x1 + x2
-        else:
-            raise Exception('Incorrect argument!')
-        
-        return x
-
-class VGGish_Cnn1D(nn.Module):
-    def __init__(self, classes_num):
-        
-
-        super(VGGish_Cnn1D, self).__init__()
-        self.name = 'VGGish_CNN1D'
-
-        self.conv_block1 = ConvBlock1D(in_channels=1, out_channels=64)
-        self.conv_block2 = ConvBlock1D(in_channels=64, out_channels=128)
-
-        self.fc1 = nn.Linear(128, 128, bias=True)
-        self.fc_audioset = nn.Linear(128, classes_num, bias=True)
-        
-        self.init_weight()
-
-    def init_weight(self):
-        # init_bn(self.bn0)
-        init_layer(self.fc1)
-        init_layer(self.fc_audioset)
- 
-    def forward(self, input, mixup_lambda=None):
-        """
-        Input: (batch_size, data_length)"""
-        
-        x = self.conv_block1(input, pool_size=2, pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        x = self.conv_block2(x, pool_size=2, pool_type='avg')
-        x = F.dropout(x, p=0.2, training=self.training)
-        # x = torch.mean(x, dim=3)
-        
-        # (x1, _) = torch.max(x, dim=2)
-        # x2 = torch.mean(x, dim=2)
-        # x = x1 + x2
-        # x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu_(self.fc1(x))
-        embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_audioset(x))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
-
-class HARModel(nn.Module):
-    
-    def __init__(self, n_hidden=128, n_layers=1, n_filters=64, 
-                 n_classes=23, filter_size=5, drop_prob=0.5):
-        super(HARModel, self).__init__()
-        self.drop_prob = drop_prob
-        self.n_layers = n_layers
-        self.n_hidden = n_hidden
-        self.n_filters = n_filters
-        self.n_classes = n_classes
-        self.filter_size = filter_size
-             
-        self.conv1 = nn.Conv1d(6, n_filters, filter_size)
-        self.conv2 = nn.Conv1d(n_filters, n_filters, filter_size)
-        self.conv3 = nn.Conv1d(n_filters, n_filters, filter_size)
-        self.conv4 = nn.Conv1d(n_filters, n_filters, filter_size)
-        
-        self.lstm1  = nn.LSTM(n_filters, n_hidden, n_layers)
-        self.lstm2  = nn.LSTM(n_hidden, n_hidden, n_layers)
-        
-        self.fc = nn.Linear(n_hidden, n_classes)
-
-        self.dropout = nn.Dropout(drop_prob)
-    
-    def forward(self, x,batch_size):
-        
-        x = x.view(-1, 6, x.shape[1])
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.conv4(x))
-        #print(x.shape)
-        x = x.view(x.shape[0], -1, self.n_filters)
-        #print('view', x.shape)
-        self.lstm1.flatten_parameters()
-        x,_ = self.lstm1(x)
-        self.lstm2.flatten_parameters()
-        x,_ = self.lstm2(x)
-        #print('lsmt', x.shape)
-        x = x.contiguous().view(x.shape[0],-1, self.n_hidden)
-        x = self.dropout(x)
-        x = torch.sigmoid(self.fc(x))
-        #print('fc',x.shape)
-        out = x.view(x.shape[0], -1, self.n_classes)[:,-1,:]
-        #print('out', out.shape)
-        return out
-    
-    def init_hidden(self, batch_size):
-        ''' Initializes hidden state '''
-        # Create two new tensors with sizes n_layers x batch_size x n_hidden,
-        # initialized to zero, for hidden state and cell state of LSTM
-        weight = next(self.parameters()).data
-        
-        hidden = (weight.new(self.n_layers, batch_size, self.n_hidden).zero_().cuda(),
-        weight.new(self.n_layers, batch_size, self.n_hidden).zero_().cuda())
-        
-        return hidden
 
 
 def init_weights(m):
@@ -1498,7 +757,6 @@ class DeepConvLSTM_Split(nn.Module):
 
         self.lstmAcc1 = nn.LSTM(64*acc_features, hidden_size=128, num_layers=1, batch_first=True)
         self.lstmAcc2 = nn.LSTM(128, 128, num_layers=1, batch_first=True)
-        #self.lstmAcc2 = nn.LSTM(128, 64, num_layers=1, batch_first=True)   # modified for kd
 
 
         self.convGyr1 = nn.Conv2d(in_channels=1, 
@@ -1529,21 +787,12 @@ class DeepConvLSTM_Split(nn.Module):
 
         self.lstmGyr1 = nn.LSTM(64*gyr_features, hidden_size=128, num_layers=1, batch_first=True)
         self.lstmGyr2 = nn.LSTM(128, 128, num_layers=1, batch_first=True)
-        #self.lstmGyr2 = nn.LSTM(128, 64, num_layers=1, batch_first=True)   # modified for kd
 
-        #self.maxPool1 = nn.MaxPool1d(kernel_size = 3)
-        #self.maxPool2 = nn.MaxPool1d(kernel_size = 3)
-        #self.dense = nn.Linear(256, 64)
         self.softmax = nn.Linear(125696, classes_num)   # window=10
-        #self.softmax = nn.Linear(255488, classes_num) ## window=20
-        #self.softmax = nn.Linear(60928, classes_num) ## window=5
-
-        #self.softmax = nn.Linear(41728, classes_num)
 
         self.init_weight()
 
     def init_weight(self):
-        # init_bn(self.bn0)
         init_layer(self.convAcc1)
         init_layer(self.convAcc2)
         init_layer(self.convAcc3)
@@ -1552,8 +801,6 @@ class DeepConvLSTM_Split(nn.Module):
         init_layer(self.convGyr2)
         init_layer(self.convGyr3)
         init_layer(self.convGyr4)
-        #init_layer(self.lstmAcc)
-        #init_layer(self.lstmGyr)
 
         init_bn(self.bnAcc1)
         init_bn(self.bnAcc2)
@@ -1563,7 +810,7 @@ class DeepConvLSTM_Split(nn.Module):
         init_bn(self.bnGyr2)
         init_bn(self.bnGyr3)
         init_bn(self.bnGyr4)
-        #init_layer(self.dense)
+        
         init_layer(self.softmax)
 
     def forward(self, inputAcc, inputGyr):
@@ -1583,11 +830,7 @@ class DeepConvLSTM_Split(nn.Module):
         x1, _ = self.lstmAcc1(x1)
         self.lstmAcc2.flatten_parameters()
         x1, (h1,c1) = self.lstmAcc2(x1)
-        #x1 = h1.reshape((h1.shape[1],-1))
-        #print(h1.shape)
-        #import pdb; pdb.set_trace()
         x1 = x1.permute((0,2,1))
-        #x1 = self.maxPool1(x1)
         x1 = torch.flatten(x1, start_dim=1)
 
         x2 = self.convGyr1(inputGyr)
@@ -1603,10 +846,8 @@ class DeepConvLSTM_Split(nn.Module):
         x2, _ = self.lstmGyr1(x2)
         self.lstmGyr2.flatten_parameters()
         x2 , (h2,c2) = self.lstmGyr2(x2)
-        #x2 = h2.reshape((h2.shape[1],-1))
         #print('lstm output from the motion DeepConvLSTM_Split model:', x2.shape)
 
-        #print(h2.shape)
         x2 = x2.permute((0,2,1))
         #x2 = self.maxPool2(x2)
         x2 = torch.flatten(x2, start_dim=1)
@@ -1614,246 +855,11 @@ class DeepConvLSTM_Split(nn.Module):
         ##print(".......",x2.shape, x1.shape)
         x3 = torch.cat([x1, x2], 1)
         #print('concat output from the motion DeepConvLSTM_Split model:', x3.shape)
-
-        #x3 = F.relu_(self.dense(x3))
-        #import pdb; pdb.set_trace()
-        #output = torch.sigmoid(self.softmax(x3))   
+  
         logits = self.softmax(x3)   # self.softmax is just a linear layer, not softmax!
-        #output = torch.sigmoid(logits)
         output = logits
 
         return {'clipwise_output': output, 'logits': logits, 'embedding': x3}
-
-class DeepConvLSTM_Split_PlusAudio(nn.Module):
-    def __init__(self, classes_num, acc_features, gyr_features):
-        super(DeepConvLSTM_Split_PlusAudio, self).__init__()
-
-        self.name = 'DeepConvLSTM'
-        self.convAcc1 = nn.Conv2d(in_channels=1, 
-                              out_channels=64,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(0,0))
-        self.bnAcc1 = nn.BatchNorm2d(64)
-                              
-        self.convAcc2 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5,1), stride=(1, 1),
-                              padding=(0, 0))
-                              
-        self.bnAcc2 = nn.BatchNorm2d(64)
-
-        self.convAcc3 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(0,0))
-        self.bnAcc3 = nn.BatchNorm2d(64)
-                              
-        self.convAcc4 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5,1), stride=(1, 1),
-                              padding=(0, 0))
-                              
-        self.bnAcc4 = nn.BatchNorm2d(64)
-
-        self.lstmAcc1 = nn.LSTM(64*acc_features, hidden_size=128, num_layers=1, batch_first=True)
-        self.lstmAcc2 = nn.LSTM(128, 128, num_layers=1, batch_first=True)
-
-
-        self.convGyr1 = nn.Conv2d(in_channels=1, 
-                              out_channels=64,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(0,0))
-        self.bnGyr1 = nn.BatchNorm2d(64)
-                              
-        self.convGyr2 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5,1), stride=(1, 1),
-                              padding=(0, 0))
-                              
-        self.bnGyr2 = nn.BatchNorm2d(64)
-
-        self.convGyr3 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(0,0))
-        self.bnGyr3 = nn.BatchNorm2d(64)
-                              
-        self.convGyr4 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5,1), stride=(1, 1),
-                              padding=(0, 0))
-                              
-        self.bnGyr4 = nn.BatchNorm2d(64)
-
-        self.lstmGyr1 = nn.LSTM(64*gyr_features, hidden_size=128, num_layers=1, batch_first=True)
-        self.lstmGyr2 = nn.LSTM(128, 128, num_layers=1, batch_first=True)
-
-        self.maxPool1 = nn.MaxPool1d(kernel_size = 3)
-        self.maxPool2 = nn.MaxPool1d(kernel_size = 3)
-        #self.dense = nn.Linear(256, 64)
-        self.softmax = nn.Linear(41728, classes_num)
-
-        self.init_weight()
-
-    def init_weight(self):
-        # init_bn(self.bn0)
-        init_layer(self.convAcc1)
-        init_layer(self.convAcc2)
-        init_layer(self.convAcc3)
-        init_layer(self.convAcc4)
-        init_layer(self.convGyr1)
-        init_layer(self.convGyr2)
-        init_layer(self.convGyr3)
-        init_layer(self.convGyr4)
-        #init_layer(self.lstmAcc)
-        #init_layer(self.lstmGyr)
-
-        init_bn(self.bnAcc1)
-        init_bn(self.bnAcc2)
-        init_bn(self.bnAcc3)
-        init_bn(self.bnAcc4)
-        init_bn(self.bnGyr1)
-        init_bn(self.bnGyr2)
-        init_bn(self.bnGyr3)
-        init_bn(self.bnGyr4)
-        #init_layer(self.dense)
-        init_layer(self.softmax)
-
-    def forward(self, inputAcc, inputGyr, audio_emb):
-
-        x1 = self.convAcc1(inputAcc)
-        x1 = self.bnAcc1(x1)
-        x1 = self.convAcc2(x1)
-        x1 = self.bnAcc2(x1)
-        x1 = self.convAcc3(x1)
-        x1 = self.bnAcc3(x1)
-        x1 = self.convAcc4(x1)
-        x1 = self.bnAcc4(x1)
-        #print(x1.shape)
-        x1 =  x1.reshape((x1.shape[0], x1.shape[2],-1)) 
-        #print(x1.shape)
-        self.lstmAcc1.flatten_parameters()
-        x1, _ = self.lstmAcc1(x1)
-        self.lstmAcc2.flatten_parameters()
-        x1, (h1,c1) = self.lstmAcc2(x1)
-        #x1 = h1.reshape((h1.shape[1],-1))
-        #print(h1.shape)
-        #import pdb; pdb.set_trace()
-        x1 = x1.permute((0,2,1))
-        x1 = self.maxPool1(x1)
-        x1 = torch.flatten(x1, start_dim=1)
-
-        x2 = self.convGyr1(inputGyr)
-        x2 = self.bnGyr1(x2)
-        x2 = self.convGyr2(x2)
-        x2 = self.bnGyr2(x2)
-        x2 = self.convGyr3(x2)
-        x2 = self.bnGyr3(x2)
-        x2 = self.convGyr4(x2)
-        x2 = self.bnGyr4(x2)      
-        x2 =  x2.reshape((x2.shape[0],x2.shape[2],-1)) 
-        self.lstmGyr1.flatten_parameters()
-        x2, _ = self.lstmGyr1(x2)
-        self.lstmGyr2.flatten_parameters()
-        x2 , (h2,c2) = self.lstmGyr2(x2)
-        #x2 = h2.reshape((h2.shape[1],-1))
-
-        #print(h2.shape)
-        x2 = x2.permute((0,2,1))
-        x2 = self.maxPool2(x2)
-        x2 = torch.flatten(x2, start_dim=1)
-        #print(x2.shape)
-        ##print(".......",x2.shape, x1.shape)
-        x3 = torch.cat([x1, x2, audio_emb], 1)
-        #print(x3.shape)
-
-        #x3 = F.relu_(self.dense(x3))
-
-        output = torch.sigmoid(self.softmax(x3))
-
-        return {'clipwise_output': output, 'embedding': x3}
-
-
-
-class DeepConvLSTM(nn.Module):
-    def __init__(self, classes_num, features):
-        super(DeepConvLSTM, self).__init__()
-
-        self.name = 'DeepConvLSTM'
-        self.conv1 = nn.Conv2d(in_channels=1, 
-                              out_channels=64,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(0,0))
-        self.bn1 = nn.BatchNorm2d(64)
-                              
-        self.conv2 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5,1), stride=(1, 1),
-                              padding=(0, 0))
-                              
-        self.bn2 = nn.BatchNorm2d(64)
-
-        self.conv3 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(0,0))
-        self.bn3 = nn.BatchNorm2d(64)
-                              
-        self.conv4 = nn.Conv2d(in_channels=64, 
-                              out_channels=64,
-                              kernel_size=(5,1), stride=(1, 1),
-                              padding=(0, 0))
-                              
-        self.bn4 = nn.BatchNorm2d(64)
-
-        self.lstm1 = nn.LSTM(64*features, hidden_size=128, num_layers=1, batch_first=True)
-        self.lstm2 = nn.LSTM(128, 128, num_layers=1, batch_first=True)
-
-        self.softmax = nn.Linear(62848, classes_num)
-
-        self.init_weight()
-
-    def init_weight(self):
-        # init_bn(self.bn0)
-        init_layer(self.conv1)
-        init_layer(self.conv2)
-        init_layer(self.conv3)
-        init_layer(self.conv4)
-        #init_layer(self.lstmAcc)
-        #init_layer(self.lstmGyr)
-
-        init_bn(self.bn1)
-        init_bn(self.bn2)
-        init_bn(self.bn3)
-        init_bn(self.bn4)
-
-        #init_layer(self.dense)
-        init_layer(self.softmax)
-
-    def forward(self, input):
-
-        x1 = self.conv1(input)
-        x1 = self.bn1(x1)
-        x1 = self.conv2(x1)
-        x1 = self.bn2(x1)
-        x1 = self.conv3(x1)
-        x1 = self.bn3(x1)
-        x1 = self.conv4(x1)
-        x1 = self.bn4(x1)
-        #print(x1.shape)
-        x1 =  x1.reshape((x1.shape[0], x1.shape[2],-1)) 
-        #print(x1.shape)
-        self.lstm1.flatten_parameters()
-        x1, _ = self.lstm1(x1)
-        self.lstm2.flatten_parameters()
-        x1, (h1,c1) = self.lstm2(x1)
-        #x1 = h1.reshape((h1.shape[1],-1))
-        #print(h1.shape)
-        x1 = torch.flatten(x1, start_dim=1)
-
-        output = torch.sigmoid(self.softmax(x1))
-
-        return {'clipwise_output': output, 'embedding': x1}
 
 
         
@@ -2087,239 +1093,6 @@ class Conv_Split_3cnn_individual(nn.Module):
 
         return {'clipwise_output': output, 'logits': logits, 'embedding': x3}
 
-    
-class Conv_Split_3cnn_channel(nn.Module):
-    '''for kd on concatenated branch output, concatenation along the channel dimension'''
-    
-    def __init__(self, classes_num, acc_features, gyr_features):
-        super(Conv_Split_3cnn_channel, self).__init__()
-
-        self.name = 'Conv_Split_3cnn_channel'
-        self.convAcc1 = nn.Conv2d(in_channels=1, 
-                              out_channels=8,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(3,0))
-        self.bnAcc1 = nn.BatchNorm2d(8)
-                              
-        self.convAcc2 = nn.Conv2d(in_channels=8, 
-                              out_channels=8,
-                              kernel_size=(5,1), stride=(1, 1),
-                              padding=(3, 0))
-                              
-        self.bnAcc2 = nn.BatchNorm2d(8)
-        
-        self.convAcc3 = nn.Conv2d(in_channels=8, 
-                      out_channels=8,
-                      kernel_size=(5,3), stride=(2, 1),
-                      padding=(2, 0))
-                              
-        self.bnAcc3 = nn.BatchNorm2d(8)
-
-
-        self.convGyr1 = nn.Conv2d(in_channels=1, 
-                              out_channels=8,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(3,0))
-        self.bnGyr1 = nn.BatchNorm2d(8)
-                              
-        self.convGyr2 = nn.Conv2d(in_channels=8, 
-                              out_channels=8,
-                              kernel_size=(5,1), stride=(1, 1),
-                              padding=(3, 0))
-                              
-        self.bnGyr2 = nn.BatchNorm2d(8)
-        
-        self.convGyr3 = nn.Conv2d(in_channels=8, 
-                              out_channels=8,
-                              kernel_size=(5,3), stride=(2, 1),
-                              padding=(2, 0))
-                              
-        self.bnGyr3 = nn.BatchNorm2d(8)
-
-        self.maxPool1 = nn.MaxPool1d(kernel_size = 4, stride=2, padding=0)
-        self.maxPool2 = nn.MaxPool1d(kernel_size = 4, stride=2, padding=0)
-
-
-        self.softmax = nn.Linear(2032, classes_num)   # window=10
-
-        self.init_weight()
-
-    def init_weight(self):
-        # init_bn(self.bn0)
-        init_layer(self.convAcc1)
-        init_layer(self.convAcc2)
-        init_layer(self.convAcc3)
-        init_layer(self.convGyr1)
-        init_layer(self.convGyr2)
-        init_layer(self.convGyr3)
-
-        init_bn(self.bnAcc1)
-        init_bn(self.bnAcc2)
-        init_bn(self.bnAcc3)
-        init_bn(self.bnGyr1)
-        init_bn(self.bnGyr2)
-        init_bn(self.bnGyr3)
-        
-        init_layer(self.softmax)
-
-    def forward(self, inputAcc, inputGyr):
-
-        # acc branch
-        x1 = self.convAcc1(inputAcc)
-        x1 = self.bnAcc1(x1)
-        #print('conv1 output:', x1.shape)
-        x1 = self.convAcc2(x1)
-        x1 = self.bnAcc2(x1)
-        #print('conv2 output:', x1.shape)
-        x1 = self.convAcc3(x1)
-        x1 = self.bnAcc3(x1)
-        #print('conv1 output from the motion Conv_Split model:', x1.shape)
-        x1 =  x1.reshape((x1.shape[0], x1.shape[2],-1)) 
-        x1 = x1.permute((0,2,1))   # cnn output, shape [batch, 8, 256]
-        x1 = self.maxPool1(x1)
-        #print('conv1 output from the motion Conv_Split model:', x1.shape)        
-        
-        # gyro branch
-        x2 = self.convGyr1(inputGyr)
-        x2 = self.bnGyr1(x2)
-        x2 = self.convGyr2(x2)
-        x2 = self.bnGyr2(x2)
-        x2 = self.convGyr3(x2)
-        x2 = self.bnGyr3(x2)
-        x2 =  x2.reshape((x2.shape[0],x2.shape[2],-1)) 
-        x2 = x2.permute((0,2,1))   # cnn output, shape [batch, 8, 256]
-        x2 = self.maxPool2(x2)
-        #print('conv2 output from the motion Conv_Split model:', x2.shape)
-        
-        # branch fusion
-        x1 = torch.flatten(x1, start_dim=1)
-        x2 = torch.flatten(x2, start_dim=1)
-        x3 = torch.cat([x1, x2], 1)
-        #print('concat output from the motion Conv_Split model:', x3.shape)
-
-        # output layer 
-        logits = self.softmax(x3)   # self.softmax is just a linear layer, not softmax!
-        #output = torch.sigmoid(logits)
-        output = logits
-
-        return {'clipwise_output': output, 'logits': logits, 'embedding': x3}
-
-
-class Conv_Split_3cnn_feature(nn.Module):
-    '''for kd on concatenated branch output, concatenation along the channel dimension'''
-    
-    def __init__(self, classes_num, acc_features, gyr_features):
-        super(Conv_Split_3cnn_feature, self).__init__()
-
-        self.name = 'Conv_Split_3cnn_feature'
-        self.convAcc1 = nn.Conv2d(in_channels=1, 
-                              out_channels=16,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(3,0))
-        self.bnAcc1 = nn.BatchNorm2d(16)
-                              
-        self.convAcc2 = nn.Conv2d(in_channels=16, 
-                              out_channels=16,
-                              kernel_size=(5,1), stride=(2, 1),
-                              padding=(3, 0))
-                              
-        self.bnAcc2 = nn.BatchNorm2d(16)
-        
-        self.convAcc3 = nn.Conv2d(in_channels=16, 
-                      out_channels=16,
-                      kernel_size=(5,3), stride=(2, 1),
-                      padding=(2, 0))
-                              
-        self.bnAcc3 = nn.BatchNorm2d(16)
-
-
-        self.convGyr1 = nn.Conv2d(in_channels=1, 
-                              out_channels=16,
-                              kernel_size=(5, 1), stride=(1,1),
-                              padding=(3,0))
-        self.bnGyr1 = nn.BatchNorm2d(16)
-                              
-        self.convGyr2 = nn.Conv2d(in_channels=16, 
-                              out_channels=16,
-                              kernel_size=(5,1), stride=(2, 1),
-                              padding=(3, 0))
-                              
-        self.bnGyr2 = nn.BatchNorm2d(16)
-        
-        self.convGyr3 = nn.Conv2d(in_channels=16, 
-                              out_channels=16,
-                              kernel_size=(5,3), stride=(2, 1),
-                              padding=(2, 0))
-                              
-        self.bnGyr3 = nn.BatchNorm2d(16)
-
-        self.maxPool1 = nn.MaxPool1d(kernel_size = 4, stride=2, padding=0)
-        self.maxPool2 = nn.MaxPool1d(kernel_size = 4, stride=2, padding=0)
-
-        self.softmax = nn.Linear(2016, classes_num)   # window=10
-
-        self.init_weight()
-
-    def init_weight(self):
-        # init_bn(self.bn0)
-        init_layer(self.convAcc1)
-        init_layer(self.convAcc2)
-        init_layer(self.convAcc3)
-        init_layer(self.convGyr1)
-        init_layer(self.convGyr2)
-        init_layer(self.convGyr3)
-
-        init_bn(self.bnAcc1)
-        init_bn(self.bnAcc2)
-        init_bn(self.bnAcc3)
-        init_bn(self.bnGyr1)
-        init_bn(self.bnGyr2)
-        init_bn(self.bnGyr3)
-        
-        init_layer(self.softmax)
-
-    def forward(self, inputAcc, inputGyr):
-
-        # acc branch
-        x1 = self.convAcc1(inputAcc)
-        x1 = self.bnAcc1(x1)
-        #print('conv1 output:', x1.shape)
-        x1 = self.convAcc2(x1)
-        x1 = self.bnAcc2(x1)
-        #print('conv2 output:', x1.shape)
-        x1 = self.convAcc3(x1)
-        x1 = self.bnAcc3(x1)
-        #print('conv1 output from the motion Conv_Split model:', x1.shape)
-        x1 =  x1.reshape((x1.shape[0], x1.shape[2],-1)) 
-        x1 = x1.permute((0,2,1))   # cnn output, shape [batch, 16, 128]
-        x1 = self.maxPool1(x1)
-        #print('conv1 output from the motion Conv_Split model:', x1.shape)        
-        
-        # gyro branch
-        x2 = self.convGyr1(inputGyr)
-        x2 = self.bnGyr1(x2)
-        x2 = self.convGyr2(x2)
-        x2 = self.bnGyr2(x2)
-        x2 = self.convGyr3(x2)
-        x2 = self.bnGyr3(x2)
-        x2 =  x2.reshape((x2.shape[0],x2.shape[2],-1)) 
-        x2 = x2.permute((0,2,1))   # cnn output, shape [batch, 16, 128]
-        x2 = self.maxPool2(x2)
-        #print('conv2 output from the motion Conv_Split model:', x2.shape)
-        
-        # branch fusion
-        x1 = torch.flatten(x1, start_dim=1)
-        x2 = torch.flatten(x2, start_dim=1)
-        x3 = torch.cat([x1, x2], 1)
-        #print('concat output from the motion Conv_Split model:', x3.shape)
-
-        # output layer 
-        logits = self.softmax(x3)   # self.softmax is just a linear layer, not softmax!
-        #output = torch.sigmoid(logits)
-        output = logits
-
-        return {'clipwise_output': output, 'logits': logits, 'embedding': x3}
-
 
 
 class Cnn14_AudioExtractor(nn.Module):
@@ -2376,10 +1149,6 @@ class Cnn14_AudioExtractor(nn.Module):
         x = x.transpose(1, 3)
         # print("spectrogram size: {}".format(x.size()))
         
-#        # Mixup on spectrogram
-#        if self.training and mixup_lambda is not None:
-#            x = do_mixup(x, mixup_lambda)
-        
         x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg')
         x = F.dropout(x, p=0.2, training=self.training)
         # import pdb; pdb.set_trace()
@@ -2401,10 +1170,6 @@ class Cnn14_AudioExtractor(nn.Module):
         x = x1 + x2
         x = F.dropout(x, p=0.5, training=self.training)
         x = F.relu_(self.fc1(x))
-        # embedding = F.dropout(x, p=0.5, training=self.training)
-        # clipwise_output = torch.sigmoid(self.fc_audioset(x))
-        
-        # output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding, 'conv_out': conv_out}
 
         return x
 
@@ -2418,7 +1183,7 @@ class Classifier(nn.Module):
         return self.fc(z)
 
     
-class Conv_split_individual_MotionAudio_CNN14_3fc(nn.Module):
+class Conv_split_individual_MotionAudio_CNN14_Attention(nn.Module):
     def __init__(
         self,
         model,
@@ -2529,64 +1294,7 @@ class FeatureExtractor(nn.Module):
         out = self.ta(outputs)
         return out
 
-class AttendDiscriminate_MotionAudio_CNN14_Concatenate(nn.Module):
-    def __init__(
-        self,
-        model,
-        input_dim,
-        hidden_dim,
-        filter_num,
-        filter_size,
-        enc_num_layers,
-        enc_is_bidirectional,
-        dropout,
-        dropout_rnn,
-        dropout_cls,
-        activation,
-        sa_div,
-        num_class,
-        train_mode,
-        sample_rate, window_size, hop_size, mel_bins, fmin, fmax
-    ):
-        super(AttendDiscriminate_MotionAudio_CNN14_Concatenate, self).__init__()
 
-        self.model = model
-        self.hidden_dim = hidden_dim
-
-        self.fe = FeatureExtractor(
-            input_dim,
-            hidden_dim,
-            filter_num,
-            filter_size,
-            enc_num_layers,
-            enc_is_bidirectional,
-            dropout,
-            dropout_rnn,
-            activation,
-            sa_div,
-        )
-
-        self.audio_fe = Cnn14_AudioExtractor(sample_rate, window_size, hop_size, mel_bins, fmin,
-        fmax, 527)
-
-        # self.sa = SelfAttention(2048+128, sa_div)
-
-        self.dropout = nn.Dropout(dropout_cls)
-        self.classifier = Classifier(2048+128, num_class)
-        self.register_buffer(
-            "centers", (torch.randn(num_class, 2048+128).cuda())
-        )
-
-    def forward(self, x_motion, x_audio):
-        feature = self.fe(x_motion)
-        feature_audio = self.audio_fe(x_audio)
-
-        feature = torch.cat([feature,feature_audio], dim=-1)
-        # refined = self.sa(feature)
-
-        out = self.dropout(feature)
-        logits = self.classifier(out)
-        return logits
 
 class DeepConvLSTM_MotionAudio_CNN14_Attention(nn.Module):
     def __init__(
@@ -2646,7 +1354,7 @@ class DeepConvLSTM_SplitV4(nn.Module):
     def __init__(self, classes_num, acc_features, gyr_features):
         super(DeepConvLSTM_SplitV4, self).__init__()
 
-        self.name = 'DeepConvLSTM'
+        self.name = 'DeepConvLSTM_SplitV4'
         self.convAcc1 = nn.Conv2d(in_channels=1, 
                               out_channels=64,
                               kernel_size=(5, 1), stride=(1,1),
@@ -2712,14 +1420,6 @@ class DeepConvLSTM_SplitV4(nn.Module):
         self.lstmGyr2 = nn.LSTM(128, 128, num_layers=1, batch_first=True)
         self.temporalAttention_Gyr = Attention(128,128)
         self.temporalAttention_Acc = Attention(128,128)
-        # self.maxPool1 = nn.MaxPool1d(kernel_size = 3)
-        # self.maxPool2 = nn.MaxPool1d(kernel_size = 3)
-
-        #self.dense = nn.Linear(256, 64)
-        #self.softmax = nn.Linear(13312, classes_num)
-        #self.softmax = nn.Linear(13824, classes_num)
-        # self.softmax = nn.Linear(41728, classes_num)
-        #self.softmax = nn.Linear(42496, classes_num)
 
         self.init_weight()
 
@@ -2770,13 +1470,7 @@ class DeepConvLSTM_SplitV4(nn.Module):
         self.lstmAcc2.flatten_parameters()
         x1, (h1,c1) = self.lstmAcc2(x1)
         x1, alpha1 = self.temporalAttention_Acc(x1)       
- #x1 = h1.reshape((h1.shape[1],-1))
-        #print(h1.shape)
-        # import pdb; pdb.set_trace()
-        # x1 = x1.permute((0,2,1))
-        # x1 = self.maxPool1(x1)
-        #x1 = torch.flatten(x1, start_dim=1)
-        #import pdb; pdb.set_trace()
+
         x2 = self.convGyr1(inputGyr)
         x2 = self.bnGyr1(x2)
         x2 = self.convGyr2(x2)
@@ -2795,21 +1489,11 @@ class DeepConvLSTM_SplitV4(nn.Module):
         self.lstmGyr2.flatten_parameters()
         x2 , (h2,c2) = self.lstmGyr2(x2)
         x2, alpha2 = self.temporalAttention_Gyr(x2)        
-#x2 = h2.reshape((h2.shape[1],-1))
 
         #print(h2.shape)
-        # x2 = x2.permute((0,2,1))
-        # x2 = self.maxPool2(x2)
-        #x2 = torch.flatten(x2, start_dim=1)
-        #print(x2.shape)
-        ##print(".......",x2.shape, x1.shape)
+
         x3 = torch.cat([x1, x2], 1)
-        #import pdb; pdb.set_trace()
-        #print(x3.shape)
 
-        #x3 = F.relu_(self.dense(x3))
-
-        # output = torch.sigmoid(self.softmax(x3))
 
         return x3
 
