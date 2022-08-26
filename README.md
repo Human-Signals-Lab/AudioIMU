@@ -1,6 +1,6 @@
 # AudioIMU_new
 
-Github page to paper: **AudioIMU: IMU-based activity recognition guided by audio inputs**
+Github page to paper: **AudioIMU: Enhancing Inertial Sensing-Based Activity Recognition with Acoustic Models** (to appear on ACM ISWC 2022)
 
 ### Student model
 
