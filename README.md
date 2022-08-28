@@ -2,19 +2,19 @@
 
 Github page to paper: **AudioIMU: Enhancing Inertial Sensing-Based Activity Recognition with Acoustic Models** (to appear on ACM ISWC 2022)
 
-### Student model
+### IMU model
 
 Derive DeepConvLSTM activity recognition models based on IMU inputs only: _lab_motion_train.py_
 
 ### Teacher models
 
-Train and evaluate teacher model 1 (audio inputs): _lab_audio_train.py_
+Train and evaluate the teacher model 1 (audio inputs): _lab_audio_train.py_
 
-Train and evaluate teacher model 2 (audio + IMU inputs): _lab_multimodal_train.py_
+Train and evaluate the teacher model 2 (audio + IMU inputs): _lab_multimodal_train.py_
 
 ### Student model guided by teacher outputs:
 
-Train and evaluate with 15 participants: _joint_trainfixlr_loso_individual.py_ 
+Train and evaluate the student models with 15 participants: _joint_trainfixlr_loso_individual.py_ 
 
 If you want to do a parameter search for your own setting (especially if you experiment with a new model architecture or your own data), you can do someting similar to script: _main_args_individuals.py_
 
