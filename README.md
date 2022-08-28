@@ -14,7 +14,7 @@ Train and evaluate teacher model 2 (audio + IMU inputs): _lab_multimodal_train.p
 
 ### Student model guided by teacher outputs:
 
-Train and evaluate with 15 participants: _joint_trainfixlr_loso_individual.py_ (Script to run multiple jobs: _main_args_individuals.py_)
+Train and evaluate with 15 participants: _joint_trainfixlr_loso_individual.py_ (If you want to do a parameter search for your own setting, you can do someting similar as in script: _main_args_individuals.py_)
 
 ====
 
