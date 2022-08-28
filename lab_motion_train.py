@@ -5,7 +5,6 @@ import os
 import random
 
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score,accuracy_score
-import matplotlib.pyplot as plt
 from sklearn import metrics
 import copy
 
@@ -15,9 +14,8 @@ import torch.optim as optim
 import torch.utils.data
 from torch.utils.data import TensorDataset
 
-from models import StatisticsContainer, init_weights, DeepConvLSTM_Split, STFT
+from models import init_weights, DeepConvLSTM_Split
 from ParticipantLab import ParticipantLab as parti
-from utils import plot_confusion_matrix, plotCNNStatistics
 
 #os.environ["CUDA_VISIBLE_DEVICES"]="0"
 torch.backends.cudnn.benchmark=True

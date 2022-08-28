@@ -7,10 +7,7 @@ import os
 import random
 
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score,accuracy_score
-import matplotlib.pyplot as plt
-import itertools
 from sklearn import metrics
-import _pickle as cPickle
 import copy
 
 import torch
@@ -20,8 +17,7 @@ import torch.utils.data
 from torch.utils.data import TensorDataset
 
 from ParticipantLab import ParticipantLab as parti
-from models import StatisticsContainer, FineTuneCNN14
-from utils import plot_confusion_matrix, plotCNNStatistics
+from models import FineTuneCNN14
 
 #os.environ["CUDA_VISIBLE_DEVICES"]="0"
 

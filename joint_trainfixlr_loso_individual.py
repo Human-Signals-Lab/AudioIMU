@@ -7,21 +7,18 @@ import random
 import argparse
 
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score,accuracy_score
-import matplotlib.pyplot as plt
 from sklearn import metrics
 import copy
 
 import torch
-from torch._C import dtype
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 from torch.utils.data import TensorDataset
 
-from models import init_weights, FineTuneCNN14, Conv_split_individual_MotionAudio_CNN14_Attention, DeepConvLSTM_Split, DeepConvLSTM_MotionAudio_CNN14_Attention
+from models import init_weights, FineTuneCNN14, DeepConvLSTM_Split, DeepConvLSTM_MotionAudio_CNN14_Attention
 from ParticipantLab import ParticipantLab as parti
-from utils import plot_confusion_matrix, plotCNNStatistics
 
 
 #os.environ["CUDA_VISIBLE_DEVICES"]="0"

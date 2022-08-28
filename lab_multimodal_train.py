@@ -7,10 +7,7 @@ import os
 import random
 
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score,accuracy_score
-import matplotlib.pyplot as plt
-import itertools
 from sklearn import metrics
-import _pickle as cPickle
 import copy
 
 import torch
@@ -21,7 +18,7 @@ from torch.utils.data import TensorDataset
 
 from ParticipantLab import ParticipantLab as parti
 from models import DeepConvLSTM_MotionAudio_CNN14_Attention
-from utils import plot_confusion_matrix, plotCNNStatistics, AverageMeter
+from utils import AverageMeter
 from utils_centerloss import compute_center_loss, get_center_delta
 
 #os.environ["CUDA_VISIBLE_DEVICES"]="1"
