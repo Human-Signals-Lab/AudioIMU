@@ -1,6 +1,6 @@
 # AudioIMU_new
 
-Github page to paper: **AudioIMU: Enhancing Inertial Sensing-Based Activity Recognition with Acoustic Models** (to appear on ACM ISWC 2022)
+Github page to paper: **AudioIMU: Enhancing Inertial Sensing-Based Activity Recognition with Acoustic Models** (to appear at ACM ISWC 2022)
 
 ### IMU model
 
@@ -16,12 +16,12 @@ Train and evaluate the teacher model 2 (audio + IMU inputs): _lab_multimodal_tra
 
 Train and evaluate the student models with 15 participants: _joint_trainfixlr_loso_individual.py_ 
 
-If you want to do a parameter search for your own setting (especially if you experiment with a new model architecture or your own data), you can do someting similar to script: _main_args_individuals.py_
+If you want to do a parameter search for your own setting (especially if you experiment with a new model architecture or your own data), you can do something similar to script: _main_args_individuals.py_
 
 If you just want to run inference for the participants' data based on our developed models, you can do something similar to script: _sample_inference.ipynb_
 
 ====
 
-All the model architectures and FFT functions are wrappped up in _models.py_ 
+All the model architectures and FFT functions are wrapped up in _models.py_ 
 
 Weights of our baselines and student models studied in the paper can be accessed at: https://doi.org/10.18738/T8/S5RTFH
