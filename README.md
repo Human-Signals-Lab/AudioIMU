@@ -24,4 +24,4 @@ If you just want to run inference for the participants' data based on our develo
 
 All the model architectures and FFT functions are wrapped up in _models.py_ 
 
-Weights of our tested models can be accessed at: https://doi.org/10.18738/T8/S5RTFH. The data is of the name: rawAudioSegmentedData_window_10_hop_0.5_Test_NEW.pkl
+Weights of our tested models can be accessed at: https://doi.org/10.18738/T8/S5RTFH. The data is of name: rawAudioSegmentedData_window_10_hop_0.5_Test_NEW.pkl
